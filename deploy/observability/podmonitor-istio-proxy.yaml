@@ -1,0 +1,33 @@
+# B-side ground truth.
+#
+# istio_requests_total{response_code="403"} is the deny observed *at the
+# enforcement point* — Service B's istio-proxy — rather than self-reported by the
+# actuator. The actuator can only say "I patched the AuthorizationPolicy"; this
+# says Envoy actually rejected the call, which is the claim being measured.
+#
+# Only service-b is selected. A's sidecar reports the same denial as a
+# source-side sample, and scraping both would double-count under
+# `sum by (response_code)`.
+#
+# Port 15090 (`http-envoy-prom`) is Envoy's own prometheus endpoint and is
+# excluded from inbound iptables capture by Istio itself, so unlike the workload
+# metrics port it needs no PeerAuthentication exception. The alternative is the
+# istio-agent merged endpoint on 15020, which folds in the app's own /metrics —
+# not wanted here, since the app is a dumb HTTP echo and its metrics arrive via
+# the zta-workloads PodMonitor.
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: istio-proxy
+  namespace: zta-ssf
+  labels:
+    release: prometheus # required — see podmonitor-workloads.yaml
+spec:
+  selector:
+    matchLabels:
+      app: service-b
+  podMetricsEndpoints:
+    - port: http-envoy-prom # istio-proxy's named port, 15090
+      path: /stats/prometheus
+      interval: 15s

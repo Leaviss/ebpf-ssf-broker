@@ -1,0 +1,59 @@
+# Scrape target for the pipeline metrics:
+# zta_revocation_{stage,pipeline}_seconds and zta_revocation_events_total off the
+# actuator, zta_probe_requests_total off service-a, and the Go/process collectors
+# off all three (process_start_time_seconds is how a restart mid-trial becomes
+# visible rather than inferred from a gap in events).
+#
+# Two things that make this silently produce nothing:
+#
+#   1. The `release: prometheus` label below. The Prometheus CR in this cluster
+#      selects PodMonitors with podMonitorSelector matchLabels release=prometheus.
+#      Without the label there is no error and no target — just an empty graph.
+#   2. STRICT mTLS. deploy/istio/peer-authentication.yaml is namespace-wide and
+#      Prometheus is outside the mesh, so its plaintext GET to pod-IP:9091 would
+#      be rejected by the sidecar's inbound listener (target DOWN, connection
+#      reset — not an obvious auth error). The pod templates in deploy/workloads
+#      carry traffic.sidecar.istio.io/excludeInboundPorts: "9091" to take the
+#      scrape port out of inbound capture. That leaves STRICT untouched on 8080 /
+#      9090 — the path actually being measured.
+#
+# `app: service-a` also matches the busybox trial pods (service-a-trial). They
+# have no metrics port, so the named-port lookup generates no target for them:
+# the service-a target count is 1, not 2, and that is not a fault.
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: zta-workloads
+  namespace: zta-ssf
+  labels:
+    release: prometheus # required — see above
+spec:
+  selector:
+    matchExpressions:
+      - key: app
+        operator: In
+        values: [translator, actuator, service-a]
+  podMetricsEndpoints:
+    # Named container port, declared on all three pod templates.
+    #
+    # 1s. Scrape interval is usually irrelevant to accuracy — histogram buckets
+    # are cumulative counters — but only while the process holding them outlives
+    # the scrape interval, which service-a does not: `make trial-reset` rolls the
+    # prober every trial, so each pod lives ~12s and a 15s interval would scrape
+    # most of them once or never. Cumulative counters in a process that dies
+    # before its second scrape carry nothing.
+    #
+    # The actuator is not restarted per trial (Makefile: trial-reset), so its
+    # revocation counters would survive at 15s. 1s is for the two things that do
+    # churn: service-a's zta_probe_requests_total, and the enforcement panel —
+    # the 200 -> 403 transition lands ~150ms after the PATCH and is simply
+    # invisible at a 15s resolution.
+    #
+    # scrapeTimeout must be <= interval or the Prometheus operator rejects the
+    # PodMonitor; the default is 10s, so it has to be set explicitly here.
+    # Cost is sample volume on three small endpoints in a single-node lab.
+    - port: metrics
+      path: /metrics
+      interval: 1s
+      scrapeTimeout: 1s

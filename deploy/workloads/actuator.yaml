@@ -1,0 +1,106 @@
+# Actuator — receives CAEP SETs from the translator over HTTP (RFC 8935 push;
+# the subject SPIFFE ID is already resolved in the SET), removes the
+# spiffe.io/spire-managed-identity pod label, and actuates the revocation into
+# the mesh via AuthorizationPolicy patch (docs/architecture.md).
+#
+# The actuator is a Kubernetes-only client: deleting SPIRE
+# registration entries is reverted by the controller-manager while the pod label
+# is present, so it patches the pod label instead and lets the controller-manager
+# tear the entry down. No SPIRE admin socket needed — hence the RBAC below.
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: actuator
+  namespace: zta-ssf
+---
+# Removing the SPIRE-managed pod label + patching Service B's AuthorizationPolicy
+# are the actuator's two actions — both are Kubernetes API writes.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: actuator
+  namespace: zta-ssf
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "patch"] # remove spiffe.io/spire-managed-identity label
+  - apiGroups: ["security.istio.io"]
+    resources: ["authorizationpolicies"]
+    verbs: ["get", "list", "create", "update", "patch"] # actuate the mesh deny
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: actuator
+  namespace: zta-ssf
+subjects:
+  - kind: ServiceAccount
+    name: actuator
+    namespace: zta-ssf
+roleRef:
+  kind: Role
+  name: actuator
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: actuator
+  namespace: zta-ssf
+spec:
+  selector:
+    app: actuator
+  ports:
+    - name: http
+      port: 9090
+      targetPort: 9090
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: actuator
+  namespace: zta-ssf
+  labels:
+    app: actuator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: actuator
+  template:
+    metadata:
+      labels:
+        app: actuator
+      annotations:
+        # See service-a.yaml — STRICT mTLS would otherwise reset Prometheus's
+        # plaintext scrape of :9091. Deliberately excludes only 9091; :9090 is
+        # the RFC 8935 receiver and stays on the measured, mTLS-protected path.
+        traffic.sidecar.istio.io/excludeInboundPorts: "9091"
+    spec:
+      serviceAccountName: actuator
+      containers:
+        - name: actuator
+          image: actuator:dev
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 9090
+            # Kept off :9090 deliberately: that port is the RFC 8935 receiver and
+            # sits on the measured path.
+            - name: metrics
+              containerPort: 9091
+          env:
+            - name: LISTEN_ADDR
+              # SET receiver endpoint (RFC 8935 push from the translator).
+              value: ":9090"
+            - name: METRICS_ADDR
+              # /metrics — zta_revocation_{stage,pipeline}_seconds and
+              # zta_revocation_events_total.
+              value: ":9091"
+            - name: POLICY_NAMESPACE
+              # The DENY AuthorizationPolicy the actuator appends revoked
+              # principals to — deploy/istio/authorization-policy-deny-revoked.yaml.
+              value: zta-ssf
+            - name: POLICY_NAME
+              value: revoked-identities

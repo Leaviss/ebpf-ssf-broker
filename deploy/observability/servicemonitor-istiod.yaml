@@ -1,0 +1,53 @@
+# T7 — istiod's own view of the config push.
+#
+# `enforce` (T8 - T6) is the one span the pipeline cannot see: it is istiod
+# pushing the patched RBAC to Service B's Envoy plus Envoy applying it. T7 does
+# not bound the measurement — `enforce` already brackets it — but it splits that
+# span into "istiod was slow" vs "Envoy was slow", which is the difference
+# between a finding about the broker and a finding about the mesh.
+#
+# What this makes available:
+#   pilot_xds_pushes{type="lds|rds|cds|eds"}   pushes issued, by xDS type
+#   pilot_proxy_convergence_time_bucket        push -> proxy ACK, istiod-side
+#   pilot_xds_push_time_bucket                 time spent building the push
+#
+# pilot_proxy_convergence_time's buckets start at 100ms, so it resolves nothing
+# below that. Read it as "did convergence blow up", not as a latency figure —
+# the reported `enforce` number comes from T8 - T6 in the per-trial CSV
+# (scripts/trial_record.py).
+#
+# Port 15014 (`http-monitoring`) is istiod's plaintext prometheus endpoint. It
+# lives outside the mesh's STRICT posture (istiod is not sidecar-injected), so
+# unlike the workload :9091 target this needs no excludeInboundPorts exception.
+#
+# The ServiceMonitor is namespaced to istio-system to sit with the Service it
+# selects; the Prometheus CR's serviceMonitorNamespaceSelector is {} (all
+# namespaces), so only the `release: prometheus` label is required. Note that
+# `make observability-delete` therefore reaches into istio-system.
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: istiod
+  namespace: istio-system
+  labels:
+    release: prometheus # required — see podmonitor-workloads.yaml
+spec:
+  # Two Services front the same istiod pod — `istiod` and
+  # `istiod-revision-tag-default`, both labelled istio=pilot. Selecting on that
+  # label alone produces two identical targets for one process, which silently
+  # doubles `sum by (type) (rate(pilot_xds_pushes[...]))`. The revision-tag
+  # Service is the one carrying istio.io/tag, so excluding that label leaves
+  # exactly one target and stays correct if the tag is renamed.
+  selector:
+    matchLabels:
+      istio: pilot
+    matchExpressions:
+      - key: istio.io/tag
+        operator: DoesNotExist
+  namespaceSelector:
+    matchNames: [istio-system]
+  endpoints:
+    - port: http-monitoring # 15014
+      path: /metrics
+      interval: 15s

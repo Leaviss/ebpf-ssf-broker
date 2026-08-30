@@ -1,0 +1,37 @@
+# Scenario 1 — anomalous process execution (unexpected tool exec inside Service A).
+#
+# EMIT-ONLY: no matchActions. Tetragon is a sensor; the match streams an event to
+# the translator and the response is identity revocation in the mesh
+# (docs/architecture.md). In-kernel response actions (SIGKILL) are out of scope
+# — see docs/architecture.md for why (network events attribute to Envoy,
+# not /app; a kill would hit the sidecar, and killing A's traffic loop
+# contaminates the latency measurement).
+#
+# Service A's app container is distroless — the only legitimate process is /app,
+# which never execs anything. Any exec of a network tool in the pod is by
+# definition the compromise signal. Simulation uses the busybox-variant image of
+# Service A (trial harness), e.g. exec `wget http://service-b:8080/` inside it.
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: emit-exec-service-a
+spec:
+  # Restrict policy evaluation to pods labeled app=service-a in the lab namespace.
+  podSelector:
+    matchLabels:
+      app: service-a
+
+  kprobes:
+    - call: "sys_execve"
+      syscall: true
+      args:
+        - index: 0
+          type: "string"   # pathname being executed
+      selectors:
+        - matchArgs:
+            - index: 0
+              operator: "Postfix"
+              values:
+                - "/curl"
+                - "/wget"
+                - "/sh"

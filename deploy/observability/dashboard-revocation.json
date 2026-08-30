@@ -1,0 +1,919 @@
+{
+  "uid": "zta-revocation",
+  "title": "ZTA Revocation",
+  "tags": [
+    "zta-ssf",
+    "thesis",
+    "phase-8"
+  ],
+  "timezone": "utc",
+  "editable": true,
+  "schemaVersion": 41,
+  "version": 3,
+  "refresh": "5s",
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
+  "graphTooltip": 1,
+  "description": "Live trial view and illustration figure. The reported percentiles, max, stddev and CV come from the per-trial CSV (scripts/trial_record.py) \u2014 every number here that involves histogram buckets is an approximation; the exact ones say so in their title. Counts and means are deltas over the dashboard time range, so set the range to start before the first trial of the run. The actuator is not restarted per trial \u2014 if the 'actuator restart' annotation fires mid-run, reconcile against the CSV.",
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      },
+      {
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "enable": true,
+        "hide": false,
+        "iconColor": "purple",
+        "name": "trial reset",
+        "expr": "changes(process_start_time_seconds{namespace=\"zta-ssf\", container=\"actuator\"}[$__rate_interval]) > 0",
+        "titleFormat": "trial reset (actuator restarted)",
+        "textFormat": "make trial-reset \u2014 dedupe set cleared, everything left of this line is a previous trial",
+        "step": "15s"
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "row",
+      "id": 1,
+      "title": "Trial outcome + pipeline latency (T6 \u2212 T0)",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "type": "stat",
+      "id": 2,
+      "title": "revocations actuated (not trials run)",
+      "description": "SETs the actuator received and acted on. This is the NUMERATOR of the success-rate claim (\u00a70 item 1) and nothing more \u2014 the denominator is not on this dashboard, because the actuator cannot count a trial whose Tetragon event never reached the translator. Dedupe makes one trial contribute at most one increment here, so this tracks trials that revoked, but a shortfall against the number of runs launched is only visible if you know that number from outside Prometheus. Take the rate from the `result` column of the per-trial CSV (\u00a76), which counts every trial including the misses; use this tile to confirm the CSV's revoked count, not to derive it. On the published run this read 296 against 300 runs launched. Counted as a delta over the dashboard range (max_over_time - min_over_time), not the counter's lifetime total: the actuator outlives the run, so its counters accumulate across every trial. The delta is exact \u2014 no increase() extrapolation \u2014 and survives a restart, but it needs the range to start before the first trial. If the 'actuator restart' annotation fires inside the range, check that count against the CSV.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 0,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum (max_over_time(zta_revocation_events_total{result=\"revoked\"}[$__range])) - sum (min_over_time(zta_revocation_events_total{result=\"revoked\"}[$__range]))",
+          "instant": true,
+          "range": false,
+          "legendFormat": "revoked"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "text"
+          },
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "none",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      }
+    },
+    {
+      "type": "stat",
+      "id": 3,
+      "title": "deduped",
+      "description": "A repeat event for a subject already revoked. Non-zero across separate trials means a reset was missed \u2014 `make trial-reset` clears the actuator's dedupe set in place (scripts/actuator-reset.sh); a failed reset shows up here. Within one trial it is expected: an exec match fires per process in the attacker's loop. Counted as a delta over the dashboard range (max_over_time - min_over_time), not the counter's lifetime total: the actuator outlives the run, so its counters accumulate across every trial. The delta is exact \u2014 no increase() extrapolation \u2014 and survives a restart, but it needs the range to start before the first trial. If the 'actuator restart' annotation fires inside the range, check that count against the CSV.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 4,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum (max_over_time(zta_revocation_events_total{result=\"deduped\"}[$__range])) - sum (min_over_time(zta_revocation_events_total{result=\"deduped\"}[$__range]))",
+          "instant": true,
+          "range": false,
+          "legendFormat": "deduped"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "noValue": "0",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 0.5
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      }
+    },
+    {
+      "type": "stat",
+      "id": 4,
+      "title": "actuator failures (not trial misses)",
+      "description": "A SET that would not decode, or a mesh patch that errored \u2014 a revocation that did not happen. Must be 0 for the determinism claim (\u00a70 item 1), but 0 here does NOT mean every trial revoked: the denominator is SETs the actuator received, so a trial whose Tetragon event never reached the translator produces no event to fail and is invisible to this tile. Four of the 300 published trials missed that way while this read 0. The trial-level success rate comes from the `result` column of the per-trial CSV (\u00a76), never from this tile. Counted as a delta over the dashboard range (max_over_time - min_over_time), not the counter's lifetime total: the actuator outlives the run, so its counters accumulate across every trial. The delta is exact \u2014 no increase() extrapolation \u2014 and survives a restart, but it needs the range to start before the first trial. If the 'actuator restart' annotation fires inside the range, check that count against the CSV.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 8,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum (max_over_time(zta_revocation_events_total{result=\"failed\"}[$__range])) - sum (min_over_time(zta_revocation_events_total{result=\"failed\"}[$__range]))",
+          "instant": true,
+          "range": false,
+          "legendFormat": "failed"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "noValue": "0",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 0.5
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      }
+    },
+    {
+      "type": "stat",
+      "id": 5,
+      "title": "mean pipeline (exact)",
+      "description": "T6\u2212T0, the mean of the actual observations (_sum/_count), so it carries no bucket-interpolation error \u2014 unlike the p50/p95 beside it. Counted as a delta over the dashboard range (max_over_time - min_over_time), not the counter's lifetime total: the actuator outlives the run, so its counters accumulate across every trial. The delta is exact \u2014 no increase() extrapolation \u2014 and survives a restart, but it needs the range to start before the first trial. If the 'actuator restart' annotation fires inside the range, check that count against the CSV.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 12,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(sum (max_over_time(zta_revocation_pipeline_seconds_sum[$__range])) - sum (min_over_time(zta_revocation_pipeline_seconds_sum[$__range]))) / (sum (max_over_time(zta_revocation_pipeline_seconds_count[$__range])) - sum (min_over_time(zta_revocation_pipeline_seconds_count[$__range])))",
+          "instant": true,
+          "range": false,
+          "legendFormat": "mean"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 2,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "text"
+          },
+          "noValue": "no trials in range"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "none",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      }
+    },
+    {
+      "type": "stat",
+      "id": 6,
+      "title": "p50 pipeline (approx)",
+      "description": "Bucket-interpolated, so it is an estimate. Buckets are cut to bracket the measured 11.8\u201325.6ms pipeline range; a single 10\u201325ms bucket spanning that whole distribution made this panel read 18.9ms against a true 16.4ms. Report the CSV percentiles (\u00a76), not this. Counted as a delta over the dashboard range (max_over_time - min_over_time), not the counter's lifetime total: the actuator outlives the run, so its counters accumulate across every trial. The delta is exact \u2014 no increase() extrapolation \u2014 and survives a restart, but it needs the range to start before the first trial. If the 'actuator restart' annotation fires inside the range, check that count against the CSV.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 16,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.50, sum by (le) (max_over_time(zta_revocation_pipeline_seconds_bucket[$__range])) - sum by (le) (min_over_time(zta_revocation_pipeline_seconds_bucket[$__range])))",
+          "instant": true,
+          "range": false,
+          "legendFormat": "p50"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 2,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "text"
+          },
+          "noValue": "no trials in range"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "none",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      }
+    },
+    {
+      "type": "stat",
+      "id": 7,
+      "title": "p95 pipeline (approx)",
+      "description": "Bucket-interpolated. Buckets too coarse for the measured range made this read 42.1ms against an observed maximum of 25.6ms \u2014 a pure boundary artefact. Still an estimate: report the CSV percentiles (\u00a76). Counted as a delta over the dashboard range (max_over_time - min_over_time), not the counter's lifetime total: the actuator outlives the run, so its counters accumulate across every trial. The delta is exact \u2014 no increase() extrapolation \u2014 and survives a restart, but it needs the range to start before the first trial. If the 'actuator restart' annotation fires inside the range, check that count against the CSV.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 20,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le) (max_over_time(zta_revocation_pipeline_seconds_bucket[$__range])) - sum by (le) (min_over_time(zta_revocation_pipeline_seconds_bucket[$__range])))",
+          "instant": true,
+          "range": false,
+          "legendFormat": "p95"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 2,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "text"
+          },
+          "noValue": "no trials in range"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "none",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      }
+    },
+    {
+      "type": "row",
+      "id": 10,
+      "title": "Stage breakdown \u2014 where the time goes",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 5
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "type": "bargauge",
+      "id": 11,
+      "title": "mean per stage (exact)",
+      "description": "Where the pipeline's time goes, as means of the real observations rather than bucket estimates. `enforce` (T8\u2212T6) is absent by construction \u2014 it needs T8 from the prober and is joined offline (\u00a76). Counted as a delta over the dashboard range (max_over_time - min_over_time), not the counter's lifetime total: the actuator outlives the run, so its counters accumulate across every trial. The delta is exact \u2014 no increase() extrapolation \u2014 and survives a restart, but it needs the range to start before the first trial. If the 'actuator restart' annotation fires inside the range, check that count against the CSV.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 24,
+        "x": 0,
+        "y": 6
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(sum by (stage) (max_over_time(zta_revocation_stage_seconds_sum[$__range])) - sum by (stage) (min_over_time(zta_revocation_stage_seconds_sum[$__range]))) / (sum by (stage) (max_over_time(zta_revocation_stage_seconds_count[$__range])) - sum by (stage) (min_over_time(zta_revocation_stage_seconds_count[$__range])))",
+          "instant": true,
+          "range": false,
+          "legendFormat": "{{stage}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 2,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "noValue": "no trials in range"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "valueMode": "color",
+        "showUnfilled": true,
+        "minVizWidth": 8,
+        "minVizHeight": 16,
+        "namePlacement": "auto",
+        "sizing": "auto"
+      }
+    },
+    {
+      "type": "row",
+      "id": 20,
+      "title": "Enforcement \u2014 the deny at Service B's sidecar",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 12
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "id": 21,
+      "title": "B-side: istio_requests_total by response_code (reporter=destination)",
+      "description": "Ground truth. This is Envoy at the enforcement point reporting what it did, not the actuator reporting what it asked for. The 200\u2192403 step is the revocation landing; T8 itself is read off the prober log at ns resolution, not from here (15s scrape).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 13
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (response_code) (rate(istio_requests_total{destination_service_name=\"service-b\", reporter=\"destination\"}[$__rate_interval]))",
+          "range": true,
+          "instant": false,
+          "legendFormat": "{{response_code}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "decimals": 1,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 15,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "200"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "green"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "403"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "id": 22,
+      "title": "A-side: zta_probe_requests_total by code",
+      "description": "The caller's own view, at the probe interval set in deploy/workloads/service-a.yaml (20ms). A flat line here during a trial is a stalled prober \u2014 a contaminated run, because T8 comes off this loop.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 13
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (code) (rate(zta_probe_requests_total[$__rate_interval]))",
+          "range": true,
+          "instant": false,
+          "legendFormat": "{{code}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "decimals": 1,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 15,
+            "showPoints": "never",
+            "spanNulls": false
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "200"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "green"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "403"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "error"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "orange"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "type": "row",
+      "id": 30,
+      "title": "Diagnostics \u2014 T7 (istiod) + process restarts. Not part of the reported result.",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 21
+      },
+      "collapsed": true,
+      "panels": [
+        {
+          "type": "timeseries",
+          "id": 31,
+          "title": "T7 \u2014 istiod xDS pushes by type",
+          "description": "The push that carries the patched RBAC to B's Envoy. A spike here between T6 and T8 is istiod reacting; no spike means the patch never reached the config pipeline.",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "gridPos": {
+            "h": 7,
+            "w": 12,
+            "x": 0,
+            "y": 22
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum by (type) (rate(pilot_xds_pushes[$__rate_interval]))",
+              "range": true,
+              "instant": false,
+              "legendFormat": "{{type}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "ops",
+              "decimals": 2,
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "drawStyle": "line",
+                "lineWidth": 2,
+                "fillOpacity": 8,
+                "showPoints": "auto",
+                "spanNulls": false
+              },
+              "noValue": "istiod not scraped \u2014 apply servicemonitor-istiod.yaml"
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true,
+              "calcs": []
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          }
+        },
+        {
+          "type": "timeseries",
+          "id": 32,
+          "title": "T7 \u2014 proxy convergence p95 (istiod-side)",
+          "description": "push \u2192 proxy ACK as istiod sees it. Its smallest bucket is 100ms, so treat it as a coarse 'did convergence blow up' check; the reported enforce span is T8 \u2212 T6 from the \u00a76 CSV.",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "gridPos": {
+            "h": 7,
+            "w": 12,
+            "x": 12,
+            "y": 22
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "histogram_quantile(0.95, sum by (le) (rate(pilot_proxy_convergence_time_bucket[$__rate_interval])))",
+              "range": true,
+              "instant": false,
+              "legendFormat": "convergence p95"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "decimals": 3,
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "purple"
+              },
+              "custom": {
+                "drawStyle": "line",
+                "lineWidth": 2,
+                "fillOpacity": 8,
+                "showPoints": "auto",
+                "spanNulls": false
+              },
+              "noValue": "istiod not scraped \u2014 apply servicemonitor-istiod.yaml"
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true,
+              "calcs": []
+            },
+            "tooltip": {
+              "mode": "single",
+              "sort": "none"
+            }
+          }
+        },
+        {
+          "type": "table",
+          "id": 33,
+          "title": "pipeline process starts (restart mid-trial?)",
+          "description": "process_start_time_seconds for the three scraped workloads. A start time inside the trial window means that process restarted mid-run \u2014 which is why the translator serves /metrics despite declaring no metrics of its own.",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "gridPos": {
+            "h": 6,
+            "w": 24,
+            "x": 0,
+            "y": 29
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "process_start_time_seconds{job=\"zta-ssf/zta-workloads\"} * 1000",
+              "instant": true,
+              "range": false,
+              "format": "table"
+            }
+          ],
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "__name__": true,
+                  "endpoint": true,
+                  "instance": true,
+                  "job": true,
+                  "namespace": true
+                },
+                "renameByName": {
+                  "container": "workload",
+                  "Value": "started at (UTC)"
+                },
+                "indexByName": {
+                  "container": 0,
+                  "pod": 1,
+                  "Value": 2
+                }
+              }
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "align": "auto",
+                "filterable": false
+              }
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "started at (UTC)"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "dateTimeAsIso"
+                  }
+                ]
+              }
+            ]
+          },
+          "options": {
+            "showHeader": true,
+            "cellHeight": "sm",
+            "footer": {
+              "show": false,
+              "reducer": [
+                "sum"
+              ],
+              "countRows": false,
+              "fields": ""
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

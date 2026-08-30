@@ -1,0 +1,36 @@
+# Scenario 2 — unexpected network egress (simulated C2 callback from Service A).
+#
+# EMIT-ONLY: no matchActions (see tracingpolicy-exec.yaml header).
+#
+# Attribution note (verified empirically): the app
+# process's own connect is INVISIBLE at every kernel connect hook tested
+# (tcp_connect, security_socket_connect, sys_connect) — Istio's iptables
+# redirect means the observable event is istio-proxy's Envoy making the
+# upstream connection. That is fine for this pipeline: the event still carries
+# the pod's namespace/workload metadata, which is all the translator needs to
+# resolve spiffe://example.org/ns/zta-ssf/sa/service-a.
+#
+# No DAddr on a CIDR: OrbStack service/pod CIDRs are not stable across cluster
+# recreation. Match the C2 sink's well-known port instead; the sink is a lab
+# harness deployment whose port (9666) nothing legitimate uses.
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: emit-egress-service-a
+spec:
+  podSelector:
+    matchLabels:
+      app: service-a
+
+  kprobes:
+    - call: "tcp_connect"
+      syscall: false
+      args:
+        - index: 0
+          type: "sock"
+      selectors:
+        - matchArgs:
+            - index: 0
+              operator: "DPort"
+              values:
+                - "9666"   # keep in sync with deploy/workloads/c2-sink.yaml.

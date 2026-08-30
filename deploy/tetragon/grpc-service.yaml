@@ -1,0 +1,23 @@
+# Exposes the Tetragon agent's gRPC API (GetEvents stream) on a stable in-cluster
+# DNS name so the translator can dial it. The chart-managed "tetragon" Service only
+# publishes the metrics port (2112); this adds a dedicated one for gRPC.
+#
+# Requires the agent to serve gRPC over TCP — see deploy/tetragon/helm/values.yaml.
+apiVersion: v1
+kind: Service
+metadata:
+  name: tetragon-grpc
+  namespace: tetragon-system
+  labels:
+    app.kubernetes.io/name: tetragon
+    app.kubernetes.io/component: grpc
+spec:
+  selector:
+    app.kubernetes.io/name: tetragon
+    app.kubernetes.io/instance: tetragon
+    app.kubernetes.io/component: agent
+  ports:
+    - name: grpc
+      port: 54321
+      targetPort: 54321
+      protocol: TCP

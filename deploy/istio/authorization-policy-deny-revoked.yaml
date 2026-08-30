@@ -1,0 +1,36 @@
+# The revoked set, owned by the actuator.
+#
+# This is the actuation target (docs/architecture.md, "How revocation works").
+# The actuator appends revoked
+# principals to spec.rules[0].from[0].source.principals with a JSON patch
+# (cmd/actuator/mesh.go), so this file is only the *starting state* — apply it
+# once, then let the actuator write to it. Re-applying resets the revoked set,
+# which is exactly how a trial is reset between runs.
+#
+# DENY is evaluated before ALLOW, so a principal listed here overrides
+# allow-a-to-b and blocks that identity at B's sidecar.
+#
+# The placeholder principal is load-bearing: the JSON patch appends to an
+# existing list, and Istio rejects a 'source' with no fields, so the list cannot
+# start empty. This value matches no real SVID.
+#
+# The manual toggle, for proving enforcement without the pipeline — swap the
+# placeholder for example.org/ns/zta-ssf/sa/service-a to hand-block A:
+#   kubectl apply  -f deploy/istio/authorization-policy-deny-revoked.yaml
+#   kubectl delete -f deploy/istio/authorization-policy-deny-revoked.yaml
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: revoked-identities
+  namespace: zta-ssf
+spec:
+  selector:
+    matchLabels:
+      app: service-b
+  action: DENY
+  rules:
+    - from:
+        - source:
+            principals:
+              - example.org/ns/zta-ssf/sa/placeholder-never-matches

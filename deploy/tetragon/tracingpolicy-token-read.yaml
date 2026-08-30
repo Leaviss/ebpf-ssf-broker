@@ -1,0 +1,45 @@
+# Scenario 3 — credential/file access abuse (unauthorized service-account-token read).
+#
+# EMIT-ONLY: no matchActions (see tracingpolicy-exec.yaml header).
+#
+# Selector hygiene is load-bearing here: pilot-agent and Envoy legitimately read
+# mounted tokens/certs on a timer. With an emit-only policy a false match doesn't
+# kill a process — it burns Service A's identity mid-experiment. matchBinaries
+# NotIn excludes the sidecar binaries and the app itself; anything else reading
+# the token is by definition the attacker.
+# Verified against a real capture (test/fixtures/token-read-sa-token.json):
+# /bin/cat reading the token matched with int_arg=4 (MAY_READ); the Prefix covers
+# the real projected `..<timestamp>/token` path; the exclusion list held.
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: emit-token-read-service-a
+spec:
+  podSelector:
+    matchLabels:
+      app: service-a
+
+  kprobes:
+    - call: "security_file_permission"
+      syscall: false
+      args:
+        - index: 0
+          type: "file"
+        - index: 1
+          type: "int"    # MAY_READ = 4
+      selectors:
+        - matchArgs:
+            - index: 0
+              operator: "Prefix"
+              values:
+                - "/var/run/secrets/kubernetes.io/serviceaccount/"
+            - index: 1
+              operator: "Equal"
+              values:
+                - "4"    # reads only
+          matchBinaries:
+            - operator: "NotIn"
+              values:
+                - "/usr/local/bin/envoy"
+                - "/usr/local/bin/pilot-agent"
+                - "/app"

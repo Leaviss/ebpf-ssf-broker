@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: zta-ssf
+  labels:
+    name: zta-ssf
+    # Revisioned istiod install — the sidecar injector webhook matches on
+    # istio.io/rev, not the legacy istio-injection=enabled label.
+    istio.io/rev: default

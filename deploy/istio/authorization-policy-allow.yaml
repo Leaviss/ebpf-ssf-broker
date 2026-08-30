@@ -1,0 +1,28 @@
+# Baseline mesh policy (2 of 3).
+#
+# Allows Service A -> Service B. Once any ALLOW policy selects a workload,
+# Istio's default for that workload flips to deny-all-except-listed, so this is
+# also what makes B reject every identity *other* than service-a.
+#
+# 'principals' matches the URI SAN of the peer SVID. With the SPIRE integration
+# the SVID is  spiffe://example.org/ns/zta-ssf/sa/service-a , and Istio matches
+# the SPIFFE ID minus the scheme.
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-a-to-b
+  namespace: zta-ssf
+spec:
+  selector:
+    matchLabels:
+      app: service-b
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals:
+              - example.org/ns/zta-ssf/sa/service-a
+      to:
+        - operation:
+            ports: ["8080"]

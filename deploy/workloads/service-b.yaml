@@ -1,0 +1,57 @@
+# Service B — dummy callee + enforcement point in the mesh-enforcement
+# architecture. Speaks plaintext HTTP; the local istio-proxy sidecar terminates
+# mTLS with a SPIRE-issued SVID and consults AuthorizationPolicy for the
+# revoked-set check.
+#
+# Identity wiring: see header of service-a.yaml.
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: service-b
+  namespace: zta-ssf
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: service-b
+  namespace: zta-ssf
+spec:
+  selector:
+    app: service-b
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: service-b
+  namespace: zta-ssf
+  labels:
+    app: service-b
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: service-b
+  template:
+    metadata:
+      labels:
+        app: service-b
+        spiffe.io/spire-managed-identity: "true"
+      annotations:
+        inject.istio.io/templates: "sidecar,spire"
+    spec:
+      serviceAccountName: service-b
+      containers:
+        - name: service-b
+          image: service-b:dev
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: LISTEN_ADDR
+              value: ":8080"

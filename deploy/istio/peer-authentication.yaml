@@ -1,0 +1,18 @@
+# Baseline mesh policy (1 of 3).
+#
+# Forces STRICT mTLS for every workload in the zta-ssf namespace. Without this,
+# Istio's default is PERMISSIVE: sidecars *accept* plaintext as well as mTLS, so
+# A->B happens to negotiate mTLS but nothing requires it. STRICT makes the
+# SPIRE-issued SVID mandatory on every connection, which is the precondition for
+# any identity-based deny (the allow/deny AuthorizationPolicies) to mean anything.
+#
+# Name 'default' with no selector = namespace-wide policy (Istio convention).
+---
+apiVersion: security.istio.io/v1
+kind: PeerAuthentication
+metadata:
+  name: default
+  namespace: zta-ssf
+spec:
+  mtls:
+    mode: STRICT

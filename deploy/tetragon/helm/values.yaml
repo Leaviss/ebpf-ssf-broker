@@ -1,0 +1,23 @@
+# Tetragon Helm values (chart 1.7.0, release "tetragon" in namespace tetragon-system).
+#
+# Kept in this helm/ subdir — NOT alongside the TracingPolicy manifests — because
+# `make tetragon-apply` runs `kubectl apply -f deploy/tetragon/` (non-recursive);
+# a Helm values file has no apiVersion/kind and would fail that apply.
+#
+# Default install serves the gRPC API only on the Unix socket
+# (unix:///var/run/tetragon/tetragon.sock), which the translator — running in a
+# separate pod — cannot reach. Switch the gRPC server to TCP so it can be exposed
+# via a ClusterIP Service (deploy/tetragon/grpc-service.yaml) and dialed by the
+# translator over the network.
+#
+# Apply with (keep --version: an un-pinned upgrade drifts the release to the
+# repo's current latest chart, since --reuse-values preserves values, not the
+# chart version):
+#   helm upgrade tetragon cilium/tetragon -n tetragon-system --version 1.7.0 \
+#     --reuse-values -f deploy/tetragon/helm/values.yaml
+#
+# The agent pod runs with hostNetwork=true, so 0.0.0.0:54321 binds on the node's
+# host network; the Service targetPort 54321 resolves to the node IP.
+tetragon:
+  grpc:
+    address: 0.0.0.0:54321

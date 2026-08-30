@@ -1,0 +1,66 @@
+# IstioOperator overlay wiring Istio to consume SPIRE-issued SVIDs.
+#
+# Two changes vs. a vanilla `istioctl install`:
+#
+#   1. meshConfig.trustDomain is flipped from Istio's default `cluster.local`
+#      to `example.org` so it matches what the SPIRE server is already minting
+#      (see spire-system/spire-server ConfigMap, key trust_domain).
+#
+#   2. A custom sidecar-injection template named "spire" is registered. Pods
+#      that want a SPIRE-issued SVID opt in by adding the annotation
+#         inject.istio.io/templates: "sidecar,spire"
+#      The template mounts the SPIFFE CSI driver's Workload API socket at
+#         /run/secrets/workload-spiffe-uds
+#      which is the path istio-proxy auto-detects for SDS-via-SPIRE. With this
+#      mount present the proxy fetches certs from spire-agent instead of from
+#      istiod's Citadel CA.
+#
+# Apply with:
+#   istioctl install -f deploy/istio/istio-operator.yaml -y
+#
+# Workloads must additionally carry the pod label
+#   spiffe.io/spire-managed-identity: "true"
+# so the spire-controller-manager's ClusterSPIFFEID selector picks them up.
+apiVersion: install.istio.io/v1alpha1
+kind: IstioOperator
+metadata:
+  name: zta-ssf-istio
+  namespace: istio-system
+spec:
+  profile: default
+  meshConfig:
+    trustDomain: example.org
+  values:
+    sidecarInjectorWebhook:
+      templates:
+        # Istio 1.23+ native-sidecar mode runs istio-proxy as an initContainer
+        # with restartPolicy=Always, not as a regular container. Target
+        # initContainers so strategic-merge patches the real proxy entry instead
+        # of synthesising a phantom one (which fails admission with
+        # 'spec.containers[1].image: Required value'). The upstream Istio docs
+        # template targets containers[] and predates native sidecars.
+        spire: |
+          spec:
+            initContainers:
+              - name: istio-proxy
+                env:
+                  # The SPIFFE CSI driver surfaces the spire-agent socket inside
+                  # the pod under the name spire-agent.sock (whatever the agent
+                  # config sets socket_path to). istio-proxy's default lookup
+                  # name is "socket", so without this override the proxy thinks
+                  # nothing is there, tries to bind its own SDS server at the
+                  # default path, fails on the read-only CSI mount, and falls
+                  # back to istiod-issued Citadel certs (silently defeating the
+                  # whole SPIRE integration). This env var aligns the proxy's
+                  # lookup with what SPIRE actually publishes.
+                  - name: WORKLOAD_IDENTITY_SOCKET_FILE
+                    value: "spire-agent.sock"
+                volumeMounts:
+                  - name: workload-socket
+                    mountPath: /run/secrets/workload-spiffe-uds
+                    readOnly: true
+            volumes:
+              - name: workload-socket
+                csi:
+                  driver: "csi.spiffe.io"
+                  readOnly: true

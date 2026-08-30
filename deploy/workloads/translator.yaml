@@ -1,0 +1,52 @@
+# Translator — consumes the Tetragon event stream and emits CAEP-formatted events
+# (docs/architecture.md). Dials the agent's gRPC GetEvents stream (TETRAGON_GRPC_ADDR)
+# and POSTs the minted SET to the actuator over HTTP (ACTUATOR_URL).
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: translator
+  namespace: zta-ssf
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: translator
+  namespace: zta-ssf
+  labels:
+    app: translator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: translator
+  template:
+    metadata:
+      labels:
+        app: translator
+      annotations:
+        # See service-a.yaml — STRICT mTLS would otherwise reset Prometheus's
+        # plaintext scrape of :9091.
+        traffic.sidecar.istio.io/excludeInboundPorts: "9091"
+    spec:
+      serviceAccountName: translator
+      containers:
+        - name: translator
+          image: translator:dev
+          imagePullPolicy: IfNotPresent
+          ports:
+            # The translator declares no metrics of its own — every pipeline
+            # span is computed actuator-side. This
+            # endpoint serves the Go/process collectors, which is how a restart
+            # mid-trial becomes visible.
+            - name: metrics
+              containerPort: 9091
+          env:
+            - name: TETRAGON_GRPC_ADDR
+              # Tetragon's gRPC API, exposed over TCP via deploy/tetragon/grpc-service.yaml
+              # (the agent is switched to 0.0.0.0:54321 in deploy/tetragon/helm/values.yaml).
+              value: tetragon-grpc.tetragon-system.svc.cluster.local:54321
+            - name: ACTUATOR_URL
+              # Full RFC 8935 SET-push endpoint (scheme + /events path); the
+              # translator POSTs the unsigned-JWT SET here as application/secevent+jwt.
+              value: http://actuator.zta-ssf.svc.cluster.local:9090/events

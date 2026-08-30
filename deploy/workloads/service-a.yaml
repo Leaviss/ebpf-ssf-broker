@@ -1,0 +1,71 @@
+# Service A — dummy "compromised" caller in the mesh-enforcement architecture.
+# Speaks plaintext HTTP to its local istio-proxy sidecar; the sidecar holds the
+# SPIRE-issued SVID and performs mTLS to Service B.
+#
+# Identity wiring (see deploy/istio/istio-operator.yaml):
+#   - The selector-less ClusterSPIFFEID 'spire-controller-manager-service-account-based'
+#     mints  spiffe://example.org/ns/zta-ssf/sa/service-a  for this pod. The
+#     spiffe.io/spire-managed-identity=true label is the hook a podSelector
+#     would key on (docs/trial-reset.md).
+#   - Pod annotation inject.istio.io/templates="sidecar,spire" applies the
+#     custom 'spire' injection template, mounting the SPIFFE CSI Workload API
+#     socket into istio-proxy at /run/secrets/workload-spiffe-uds. The proxy
+#     fetches SVIDs from SPIRE via SDS instead of from istiod's Citadel CA.
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: service-a
+  namespace: zta-ssf
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: service-a
+  namespace: zta-ssf
+  labels:
+    app: service-a
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: service-a
+  template:
+    metadata:
+      labels:
+        app: service-a
+        spiffe.io/spire-managed-identity: "true"
+      annotations:
+        inject.istio.io/templates: "sidecar,spire"
+        # Takes the scrape port out of the sidecar's inbound iptables capture.
+        # PeerAuthentication is STRICT namespace-wide and Prometheus is outside
+        # the mesh, so without this its plaintext GET to pod-IP:9091 is reset by
+        # the inbound listener and the PodMonitor target sits DOWN. The
+        # measured path (8080 app traffic, 9090 SET push) keeps STRICT.
+        traffic.sidecar.istio.io/excludeInboundPorts: "9091"
+    spec:
+      serviceAccountName: service-a
+      containers:
+        - name: service-a
+          image: service-a:dev   # built by `make image-service-a` and loaded into the local cluster.
+          imagePullPolicy: IfNotPresent
+          ports:
+            # Scrape target for zta_probe_requests_total. The name is what the
+            # PodMonitor in deploy/observability selects on.
+            - name: metrics
+              containerPort: 9091
+          env:
+            - name: TARGET_URL
+              value: http://service-b.zta-ssf.svc.cluster.local:8080
+            # Probe cadence. Bounds the resolution of T8 ("first request
+            # denied") and the width of the bracket trial_record.py measures it
+            # in. Any time.ParseDuration string.
+            #
+            # 20ms (50 req/s): the value the published measurement run was
+            # measured at — its t8_win_ms is ~20ms wide, one probe interval.
+            # In the code's stated 10-50ms trial range: fine enough that the
+            # T8 quantisation is small against the ~120ms enforcement span,
+            # without RTT (~1ms) making the cadence irregular. Keeps the A->B
+            # connection warm, exercising the pooled-connection case.
+            - name: PROBE_INTERVAL
+              value: 20ms
